@@ -36,6 +36,8 @@ import com.google.common.collect.Iterables;
 
 import hudson.Extension;
 import hudson.model.Item;
+import hudson.model.ItemGroup;
+import hudson.model.Job;
 import hudson.model.TopLevelItem;
 import hudson.model.AbstractProject;
 import hudson.model.Cause;
@@ -63,6 +65,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
 import org.kohsuke.stapler.bind.JavaScriptMethod;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import au.com.centrumsystems.hudson.plugin.util.ProjectUtil;
 
@@ -450,9 +453,32 @@ public class BuildPipelineView extends View {
      *            upstream project
      * @return next build number that has been scheduled
      */
+    @RequirePOST
     @JavaScriptMethod
     public int triggerManualBuild(final Integer upstreamBuildNumber, final String triggerProjectName, final String upstreamProjectName) {
-        return buildCard.triggerManualBuild(getOwnerItemGroup(), upstreamBuildNumber, triggerProjectName, upstreamProjectName);
+        // SECURITY FIX: Verify user has BUILD permission on target project
+        final Jenkins jenkins = Jenkins.getInstance();
+        if (jenkins == null) {
+            throw new IllegalStateException("Jenkins instance not available");
+        }
+
+        final ItemGroup<?> ownerGroup = getOwnerItemGroup();
+        if (ownerGroup == null) {
+            throw new IllegalStateException("Owner item group not available");
+        }
+
+        final AbstractProject<?, ?> targetProject =
+            (AbstractProject<?, ?>) jenkins.getItem(triggerProjectName, ownerGroup);
+
+        if (targetProject == null) {
+            throw new IllegalArgumentException("Project not found: " + triggerProjectName);
+        }
+
+        // Check BUILD permission - throws AccessDeniedException if denied
+        targetProject.checkPermission(Item.BUILD);
+
+        LOGGER.fine("User authorized to trigger build on project: " + triggerProjectName);
+        return buildCard.triggerManualBuild(ownerGroup, upstreamBuildNumber, triggerProjectName, upstreamProjectName);
     }
 
     /**
@@ -463,9 +489,26 @@ public class BuildPipelineView extends View {
      *            the externalizableId of the Run. See {@link hudson.model.Run#getExternalizableId()}
      * @return the number of re-run build
      */
+    @RequirePOST
     @JavaScriptMethod
     public int rerunBuild(final String externalizableId) {
         LOGGER.info("Running build again: " + externalizableId); //$NON-NLS-1$
+
+        // SECURITY FIX: Verify user has BUILD permission on the project being re-run
+        final hudson.model.Run<?, ?> run = hudson.model.Run.fromExternalizableId(externalizableId);
+        if (run == null) {
+            throw new IllegalArgumentException("Build not found: " + externalizableId);
+        }
+
+        final Job<?, ?> job = run.getParent();
+        if (job == null) {
+            throw new IllegalStateException("Parent job not available for build: " + externalizableId);
+        }
+
+        // Check BUILD permission on the project
+        job.checkPermission(Item.BUILD);
+
+        LOGGER.fine("User authorized to re-run build: " + externalizableId);
         return buildCard.rerunBuild(externalizableId);
     }
 

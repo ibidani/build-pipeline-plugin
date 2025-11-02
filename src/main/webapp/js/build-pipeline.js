@@ -5,9 +5,24 @@ var BuildPipeline = function(viewProxy, buildCardTemplate, projectCardTemplate, 
     this.projectProxies = {};
 	this.viewProxy = viewProxy;
 	this.refreshFrequency = refreshFrequency;
+	// SECURITY FIX: Store CSRF crumb for API calls
+	this.crumb = window.crumb || null;
 };
 
 BuildPipeline.prototype = {
+	/**
+	 * SECURITY FIX: Get CSRF crumb headers for API requests
+	 * @returns {Object} Headers object with crumb if available
+	 */
+	getCrumbHeaders : function() {
+		if (this.crumb && this.crumb.field && this.crumb.value) {
+			var headers = {};
+			headers[this.crumb.field] = this.crumb.value;
+			return headers;
+		}
+		return {};
+	},
+
 	showProgress : function(id, dependencies) {
 		var buildPipeline = this;
 		var intervalId = setInterval(function(){

@@ -32,6 +32,12 @@
 
     <st:bind var="buildPipelineViewProxy" value="${from}" />
     <script type="text/javascript">
+        // SECURITY FIX: Initialize CSRF crumb for API requests
+        window.crumb = {
+            field: '${h.getCrumbRequestField()}',
+            value: '${h.getCrumb(request)}'
+        };
+
         var buildCardTemplateSource = jQuery("#build-card-template").html();
         var projectCardTemplateSource = jQuery("#project-card-template").html();
         var buildPipeline = new BuildPipeline(buildPipelineViewProxy, Handlebars.compile(buildCardTemplateSource), Handlebars.compile(projectCardTemplateSource), ${from.getRefreshFrequencyInMillis()});
